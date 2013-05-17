@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import pygame.joystick
 import threading
 BAUDRATE = 250000
@@ -8,6 +9,9 @@ import serial
 import Queue
 import copy
 import time
+import os
+import pygame.camera
+import pygame.image
 
 INIT = '''
 G28 ; home all
@@ -32,6 +36,8 @@ G1 X0 Y10
 G1 X0 Y0
 '''
 
+dryrun = False
+camfile = '/dev/video1'
 
 class Rostock(object):
     def __init__(self, dev=DEVICE, baud=BAUDRATE,
@@ -79,15 +85,6 @@ class Rostock(object):
             '''
 
 
-
-pygame.display.init()
-
-pygame.joystick.init() #initialize joystick module
-pygame.joystick.get_init() #verify initialization (boolean)
-
-joystick_count = pygame.joystick.get_count()#get number of joysticks
-# it's for some case, important to get the joystick number ...
-
 def gcodespitter():
     rostock = Rostock()
     rostock.connect()
@@ -95,6 +92,7 @@ def gcodespitter():
 
     while True:
         item = q.get()
+        print item
         q.task_done()
 
 q = Queue.Queue()
@@ -154,70 +152,135 @@ def calib(st, but, (x, y, z), cfg):
 def correct(cfg, coord):
     out = [0] * 3
     for i in range(len(coord)):
-        if coord[i] < cfg[1][i]:
-            out[i] = -1.0 + (coord[i] - cfg[0][i]) / (cfg[1][i] - cfg[0][i])
-        else:
-            out[i] = (coord[i] - cfg[1][i]) / (cfg[2][i] - cfg[1][i])
+        try:
+            if coord[i] < cfg[1][i]:
+                out[i] = -1.0 + (coord[i] - cfg[0][i]) / (cfg[1][i] - cfg[0][i])
+            else:
+                out[i] = (coord[i] - cfg[1][i]) / (cfg[2][i] - cfg[1][i])
+        except ZeroDivisionError as e:
+            out[i] = 0.0
 
 #        out[i] = (coord[i] - cfg[0][i]) / (cfg[2][i] - cfg[0][i])
 
     return out
 
-st = 0
-correction = [[0,0,0], [0, 0, 0], [0,0,0]]
-calibd = False
+def goon():
+    st = 0
+    correction = [[0,0,0], [0, 0, 0], [0,0,0]]
 
-while True:
-  if joystick_count == 1:
+    calibd = skip_calib #False
+
+    screen = pygame.display.set_mode([800,420])
+    pygame.init()
+    pygame.camera.init()
+
+    cam = pygame.camera.Camera(camfile,(640,480))
+    # start the camera
+    cam.start()
+
+
+    pygame.display.init()
+
+    pygame.joystick.init() #initialize joystick module
+    pygame.joystick.get_init() #verify initialization (boolean)
+
+    joystick_count = pygame.joystick.get_count()#get number of joysticks
+    # it's for some case, important to get the joystick number ...
+
+    if joystick_count == 1:
       joystick = pygame.joystick.Joystick(0)
       joystick.get_name()
       joystick.init()
       joystick.get_init()
-      #verify initialization (maybe cool to do some error trapping with this so    game doesn't crash
-      pygame.event.pump()
-      # So Now i can get my joystick Axis events
 
-      xax_ = joystick.get_axis(0)
-      yax_ = joystick.get_axis(1)
-      zax_ = joystick.get_axis(3)
+    while True:
+      time.sleep( 0.05 )
+      # fetch the camera image
+      image = cam.get_image()
+      # blank out the screen
+      screen.fill([0,0,0])
+      # copy the camera image to the screen
+      screen.blit( image, ( 100, 0 ) )
+      # update the screen to show the latest screen image
+      pygame.display.update()
 
-      buttons = joystick.get_numbuttons()
-      b0 = joystick.get_button(0)
-      b1 = joystick.get_button(1)
-      b2 = joystick.get_button(2)
-      b3 = joystick.get_button(3)
+      if joystick_count == 1:
 
-      if st == 1:
-          print 'put joystick to center and press B0'
-      elif st == 3:
-          print 'put joystick to left and press B0'
-      elif st == 5:
-          print 'put joystick to right and press B0'
-      elif st == 7:
-          print 'put joystick to up and press B0'
-      elif st == 9:
-          print 'put joystick to down and press B0'
-      elif st == 11:
-          print 'put joystick to top and press B0'
-      elif st == 13:
-          print 'put joystick to bottom and press B0'
+          #verify initialization (maybe cool to do some error trapping with this so    game doesn't crash
+          pygame.event.pump()
+          # So Now i can get my joystick Axis events
 
-      if not calibd:
-          st = calib(st, b0, (xax_, yax_, zax_), correction)
-          print correction
-          if st == 14:
-              calibd = True
-          continue
+          xax_ = joystick.get_axis(0)
+          yax_ = joystick.get_axis(1)
+          zax_ = joystick.get_axis(3)
 
-      (xax, yax, zax) = correct(correction, (xax_, yax_, zax_))
-      print correction,
-      print (xax, yax, zax)
-#      if b1 != b2:
-#          if b1:
-#              q.put('G1 Z10')
-#          if b2:
-#              q.put('G1 Z-10')
-#      if b3:
-#          q.put('G1 X%d Y%d' % (xax, yax))
-#
-#      q.join()
+          buttons = joystick.get_numbuttons()
+          b0 = joystick.get_button(0)
+          b1 = joystick.get_button(1)
+          b2 = joystick.get_button(2)
+          b3 = joystick.get_button(3)
+
+          if st == 1:
+              print 'put joystick to center and press B0'
+          elif st == 3:
+              print 'put joystick to left and press B0'
+          elif st == 5:
+              print 'put joystick to right and press B0'
+          elif st == 7:
+              print 'put joystick to up and press B0'
+          elif st == 9:
+              print 'put joystick to down and press B0'
+          elif st == 11:
+              print 'put joystick to top and press B0'
+          elif st == 13:
+              print 'put joystick to bottom and press B0'
+
+          if not calibd:
+              st = calib(st, b0, (xax_, yax_, zax_), correction)
+              print correction
+              if st == 14:
+                  calibd = True
+              continue
+
+          (xax, yax, zax) = correct(correction, (xax_, yax_, zax_))
+          print correction,
+          print (xax, yax, zax)
+      if not dryrun:
+          if b1 != b2:
+              if b1:
+                  q.put('G1 Z10')
+              if b2:
+                  q.put('G1 Z-10')
+          if b3:
+              q.put('G1 X%d Y%d' % (xax, yax))
+
+          print 'q.join'
+          q.join()
+      if b0:
+        fnm = time.strftime('%Y%m%d-%H%M%S.png')
+        pygame.image.save(image, fnm)
+        print fnm, 'saved'
+
+def show_help():
+    print """usage: ./joy.py [-h] [-d] [-c /dev/videoX] [-nc]
+                 -h  show this help and exit
+                 -d  (dry run) don't enqueue printer commands
+                 -c  use camera FILE (by default /dev/video1)
+                 -nc skip calibration
+"""
+
+if __name__ == "__main__":
+
+  skip_calib = False
+  if len(sys.argv) > 1:
+    if '-h' in sys.argv:
+      show_help()
+      exit(1)
+    if '-d' in sys.argv:
+      dryrun = True
+    if '-c' in sys.argv:
+      camfile = sys.argv[sys.argv.index('-c') + 1]
+    if '-nc' in sys.argv:
+      skip_calib = True
+
+  goon()

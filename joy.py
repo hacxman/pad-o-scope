@@ -124,7 +124,7 @@ def calib(st, but, (x, y, z), cfg):
 
     elif st == 1 and but:
         st += 20
-        cfg = [[0,0,0], [x, y, z], [0,0,0]]
+        cfg[1] = [x, y, z]
     elif st == 3 and but:
         cfg[0][0] = x
         st += 20
@@ -154,7 +154,12 @@ def calib(st, but, (x, y, z), cfg):
 def correct(cfg, coord):
     out = [0] * 3
     for i in range(len(coord)):
-        out[i] = (coord[i] - cfg[0][i]) / (cfg[2][i] - cfg[0][i])
+        if coord[i] < cfg[1][i]:
+            out[i] = -1.0 + (coord[i] - cfg[0][i]) / (cfg[1][i] - cfg[0][i])
+        else:
+            out[i] = (coord[i] - cfg[1][i]) / (cfg[2][i] - cfg[1][i])
+
+#        out[i] = (coord[i] - cfg[0][i]) / (cfg[2][i] - cfg[0][i])
 
     return out
 

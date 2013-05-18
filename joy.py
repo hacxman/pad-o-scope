@@ -44,6 +44,7 @@ G1 X0 Y0
 '''
 
 dryrun = False
+nocam = False
 camfile = '/dev/video1'
 
 CALIB_NONE = 0
@@ -218,9 +219,10 @@ def camera_gui():
 
 def goon():
     global q, q_gui
-    t = threading.Thread(target=gcodespitter)
-    t.daemon = True
-    t.start()
+    if not dryrun:
+      t = threading.Thread(target=gcodespitter)
+      t.daemon = True
+      t.start()
 
     st = 0
     b0 = b1 = b2 = b3 = 0
@@ -318,6 +320,7 @@ def show_help():
                  -h  show this help and exit
                  -d  (dry run) don't enqueue printer commands
                  -c  use camera FILE (by default /dev/video1)
+                 -nocam  don't use camera
                  -nc skip calibration
                  -sc save calibration to FILE
                  -sc load calibration from FILE
@@ -342,5 +345,10 @@ if __name__ == "__main__":
     if '-lc' in sys.argv:
       calibfile = sys.argv[sys.argv.index('-lc') + 1]
       calibaction = CALIB_LOAD
+    if '-nocam' in sys.argv:
+      nocam = True
 
-  camera_gui()
+  if not nocam:
+    camera_gui()
+  else:
+    goon()

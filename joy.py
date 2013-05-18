@@ -98,6 +98,7 @@ class Rostock(object):
 def gcodespitter():
     rostock = Rostock()
     rostock.connect()
+    time.sleep(0.1)
     rostock.init()
     while True:
         item = q.get()
@@ -118,16 +119,16 @@ def calib(st, but, (x, y, z), cfg):
         print 'put joystick to right and press B0'
         st += 1
     elif st == 6:
-        print 'put joystick to up and press B0'
-        st += 1
-    elif st == 8:
         print 'put joystick to down and press B0'
         st += 1
+    elif st == 8:
+        print 'put joystick to up and press B0'
+        st += 1
     elif st == 10:
-        print 'put joystick to top and press B0'
+        print 'put joystick to bottom and press B0'
         st += 1
     elif st == 12:
-        print 'put joystick to bottom and press B0'
+        print 'put joystick to top and press B0'
         st += 1
 
     elif st == 1 and but:
@@ -174,12 +175,55 @@ def correct(cfg, coord):
 
     return out
 
+q_gui = Queue.Queue()
+def camera_gui():
+    screen = pygame.display.set_mode([800,480])
+    pygame.init()
+
+    t2 = threading.Thread(target=goon)
+    t2.daemon = True
+    t2.start()
+
+    pygame.camera.init()
+
+    cam = pygame.camera.Camera(camfile,(640,480))
+    # start the camera
+    cam.start()
+
+    pygame.display.init()
+    while True:
+      print 'lol'
+      time.sleep( 0.05 )
+
+      # fetch the camera image
+      image = cam.get_image()
+      # blank out the screen
+      screen.fill([0,0,0])
+      # copy the camera image to the screen
+      screen.blit( image, ( 100, 0 ) )
+      # update the screen to show the latest screen image
+      pygame.display.update()
+      try:
+        msg = q_gui.get(block=False)
+        if msg == 'save':
+          fnm = time.strftime('%H%M%S-%Y%m%d.png')
+          pygame.image.save(image, fnm)
+          print fnm, 'saved'
+        if msg == 'quit':
+          return
+      except Queue.Empty as a:
+        pass
+
+
+
 def goon():
-    global q
+    global q, q_gui
     t = threading.Thread(target=gcodespitter)
     t.daemon = True
     t.start()
+
     st = 0
+    b0 = b1 = b2 = b3 = 0
     correction = [[0,0,0], [0, 0, 0], [0,0,0]]
     def print_(x):
         print >> sys.stderr, x
@@ -191,16 +235,6 @@ def goon():
               map(lambda x:
                   map(lambda z: z.strip(), x.split(',')), f.readlines()))
 
-    screen = pygame.display.set_mode([800,420])
-    pygame.init()
-    pygame.camera.init()
-
-    cam = pygame.camera.Camera(camfile,(640,480))
-    # start the camera
-    cam.start()
-
-
-    pygame.display.init()
 
     pygame.joystick.init() #initialize joystick module
     pygame.joystick.get_init() #verify initialization (boolean)
@@ -215,15 +249,7 @@ def goon():
       joystick.get_init()
 
     while True:
-      time.sleep( 0.05 )
-      # fetch the camera image
-      image = cam.get_image()
-      # blank out the screen
-      screen.fill([0,0,0])
-      # copy the camera image to the screen
-      screen.blit( image, ( 100, 0 ) )
-      # update the screen to show the latest screen image
-      pygame.display.update()
+      time.sleep(0.05)
 
       if joystick_count == 1:
 
@@ -248,13 +274,13 @@ def goon():
           elif st == 5:
               print >> sys.stderr, 'put joystick to right and press B0',
           elif st == 7:
-              print >> sys.stderr, 'put joystick to up and press B0',
-          elif st == 9:
               print >> sys.stderr, 'put joystick to down and press B0',
+          elif st == 9:
+              print >> sys.stderr, 'put joystick to up and press B0',
           elif st == 11:
-              print >> sys.stderr, 'put joystick to top and press B0',
-          elif st == 13:
               print >> sys.stderr, 'put joystick to bottom and press B0',
+          elif st == 13:
+              print >> sys.stderr, 'put joystick to top and press B0',
 
           if not calibd:
               st = calib(st, b0, (xax_, yax_, zax_), correction)
@@ -285,9 +311,7 @@ def goon():
           print 'q.join'
           q.join()
       if b0:
-        fnm = time.strftime('%H%M%S-%Y%m%d.png')
-        pygame.image.save(image, fnm)
-        print fnm, 'saved'
+        q_gui.put('save')
 
 def show_help():
     print """usage: ./joy.py [-h] [-d] [-c /dev/videoX] [-nc] [(-sc|-lc) FILE]
@@ -319,4 +343,4 @@ if __name__ == "__main__":
       calibfile = sys.argv[sys.argv.index('-lc') + 1]
       calibaction = CALIB_LOAD
 
-  goon()
+  camera_gui()

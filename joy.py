@@ -39,6 +39,11 @@ G1 X0 Y0
 dryrun = False
 camfile = '/dev/video1'
 
+CALIB_NONE = 0
+CALIB_SAVE = 1
+CALIB_LOAD = 2
+calibaction = CALIB_NONE
+
 class Rostock(object):
     def __init__(self, dev=DEVICE, baud=BAUDRATE,
                  echo=True):
@@ -86,10 +91,9 @@ class Rostock(object):
 
 
 def gcodespitter():
-    rostock = Rostock()
-    rostock.connect()
-    rostock.init()
-
+#    rostock = Rostock()
+#    rostock.connect()
+#    rostock.init()
     while True:
         item = q.get()
         print item
@@ -145,7 +149,7 @@ def calib(st, but, (x, y, z), cfg):
     elif st >= 20 and st <= 33 and (but):
         st -= 19
 
-    time.sleep(0.1)
+    time.sleep(0.01)
     return st
 
 
@@ -165,10 +169,21 @@ def correct(cfg, coord):
     return out
 
 def goon():
+    global q
+    t = threading.Thread(target=gcodespitter)
+    t.daemon = True
+    t.start()
     st = 0
     correction = [[0,0,0], [0, 0, 0], [0,0,0]]
-
+    def print_(x):
+        print >> sys.stderr, x
     calibd = skip_calib #False
+    if calibaction == CALIB_LOAD:
+        calibd = True
+        with open(calibfile, 'r') as f:
+          correction = map(lambda j: map(float, j),
+              map(lambda x:
+                  map(lambda z: z.strip(), x.split(',')), f.readlines()))
 
     screen = pygame.display.set_mode([800,420])
     pygame.init()
@@ -221,52 +236,61 @@ def goon():
           b3 = joystick.get_button(3)
 
           if st == 1:
-              print 'put joystick to center and press B0'
+              print >> sys.stderr, 'put joystick to center and press B0',
           elif st == 3:
-              print 'put joystick to left and press B0'
+              print >> sys.stderr, 'put joystick to left and press B0',
           elif st == 5:
-              print 'put joystick to right and press B0'
+              print >> sys.stderr, 'put joystick to right and press B0',
           elif st == 7:
-              print 'put joystick to up and press B0'
+              print >> sys.stderr, 'put joystick to up and press B0',
           elif st == 9:
-              print 'put joystick to down and press B0'
+              print >> sys.stderr, 'put joystick to down and press B0',
           elif st == 11:
-              print 'put joystick to top and press B0'
+              print >> sys.stderr, 'put joystick to top and press B0',
           elif st == 13:
-              print 'put joystick to bottom and press B0'
+              print >> sys.stderr, 'put joystick to bottom and press B0',
 
           if not calibd:
               st = calib(st, b0, (xax_, yax_, zax_), correction)
-              print correction
+              print >> sys.stderr, correction
               if st == 14:
+                  print >> sys.stderr, 'CALIBRATED.',
                   calibd = True
+                  if calibaction == CALIB_SAVE:
+                      with open(calibfile, 'w+') as f:
+                          f.write('\n'.join(
+                              map(lambda x: ','.join(map(str,x)), correction)))
               continue
 
           (xax, yax, zax) = correct(correction, (xax_, yax_, zax_))
-          print correction,
-          print (xax, yax, zax)
+          print >> sys.stderr, correction,
+          print >> sys.stderr, (xax, yax, zax)
       if not dryrun:
           if b1 != b2:
               if b1:
                   q.put('G1 Z10')
+                  #q.put('G1 Z%d' % (yax*20))
               if b2:
                   q.put('G1 Z-10')
+                  #q.put('G1 Z-%d' % (yax*20))
           if b3:
-              q.put('G1 X%d Y%d' % (xax, yax))
+              q.put('G1 X%d Y%d' % (xax*40, yax*40))
 
           print 'q.join'
           q.join()
       if b0:
-        fnm = time.strftime('%Y%m%d-%H%M%S.png')
+        fnm = time.strftime('%H%M%S-%Y%m%d.png')
         pygame.image.save(image, fnm)
         print fnm, 'saved'
 
 def show_help():
-    print """usage: ./joy.py [-h] [-d] [-c /dev/videoX] [-nc]
+    print """usage: ./joy.py [-h] [-d] [-c /dev/videoX] [-nc] [(-sc|-lc) FILE]
                  -h  show this help and exit
                  -d  (dry run) don't enqueue printer commands
                  -c  use camera FILE (by default /dev/video1)
                  -nc skip calibration
+                 -sc save calibration to FILE
+                 -sc load calibration from FILE
 """
 
 if __name__ == "__main__":
@@ -282,5 +306,11 @@ if __name__ == "__main__":
       camfile = sys.argv[sys.argv.index('-c') + 1]
     if '-nc' in sys.argv:
       skip_calib = True
+    if '-sc' in sys.argv:
+      calibfile = sys.argv[sys.argv.index('-sc') + 1]
+      calibaction = CALIB_SAVE
+    if '-lc' in sys.argv:
+      calibfile = sys.argv[sys.argv.index('-lc') + 1]
+      calibaction = CALIB_LOAD
 
   goon()

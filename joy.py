@@ -177,9 +177,9 @@ def correct(cfg, coord):
     return out
 
 q_gui = Queue.Queue()
+pygame.init()
 def camera_gui():
     screen = pygame.display.set_mode([800,480])
-    pygame.init()
 
     t2 = threading.Thread(target=goon)
     t2.daemon = True

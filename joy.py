@@ -13,7 +13,13 @@ import os
 import pygame.camera
 import pygame.image
 
-INIT = '''
+M_INIT = '''
+G28 ; home
+G1 F3000
+G21
+G91
+'''
+R_INIT = '''
 G28 ; home all
 G1 F10000
 G90 ; use absolute coords
@@ -23,6 +29,7 @@ G4 P100 ; wait
 G1 X0.00 Y0.00 F8000.00
 G4 P100 ; wait
 '''
+INIT = M_INIT
 
 END = '''
 G28 ; home all
@@ -82,21 +89,20 @@ class Rostock(object):
                 print(line)
             self.bot.write('{0}\n'.format(line))
 
-            '''
             response = self.bot.readline()
             while response[:3] != "ok:":
                 sys.stderr.write('Unexpected response: {0}'.format(response))
                 response = self.bot.readline()
-            '''
 
 
 def gcodespitter():
-#    rostock = Rostock()
-#    rostock.connect()
-#    rostock.init()
+    rostock = Rostock()
+    rostock.connect()
+    rostock.init()
     while True:
         item = q.get()
-        print item
+        print >> sys.stderr,  item
+        rostock.send(item)
         q.task_done()
 
 q = Queue.Queue()

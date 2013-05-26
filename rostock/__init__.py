@@ -1,5 +1,6 @@
 #!/usr/bin/python
-BAUDRATE = 250000
+#BAUDRATE = 250000
+BAUDRATE = 115200
 DEVICE = "/dev/ttyUSB0"
 
 import sys

@@ -14,7 +14,7 @@ machine.init()
 t = 0
 x = 0
 y = 0
-y = 0
+z = 0
 scale = 50
 zoffset = 20
 STEP = 0.1

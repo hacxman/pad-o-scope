@@ -12,6 +12,10 @@ import time
 import os
 import pygame.camera
 import pygame.image
+from operator import add
+import math
+
+MACHINE_BOX = [[-50, 50], [-50, 50], [-1.0, 100]]
 
 M_INIT = '''
 G28 ; home
@@ -91,23 +95,67 @@ class Rostock(object):
             self.bot.write('{0}\n'.format(line))
 
             response = self.bot.readline()
-            while response[:3] != "ok:":
+            while response[:3] != "ok":
                 sys.stderr.write('Unexpected response: {0}'.format(response))
                 response = self.bot.readline()
 
+def signum(a):
+  if a > 0:
+    return 1
+  elif a == 0:
+    return 0
+  else:
+    return -1
 
-def gcodespitter():
+def gcodespitter(speed=10.0, stepsize=1.0, scaler=lambda x,y: (x,y)):
     rostock = Rostock()
     rostock.connect()
     time.sleep(0.1)
     rostock.init()
+    dt = stepsize / speed
+    steps = 1.0 / dt
+
+    machine_pos = [0.0, 0.0, 0.0]
+
     while True:
         item = q.get()
         print >> sys.stderr,  item
-        rostock.send(item)
-        q.task_done()
+        s = item.split()
+        if s[0] == 'G1':
+          (x,y,z) = reduce(lambda u, v: map(lambda (_w, _z): add(_w, _z), zip(u,v)),
+              map(lambda (pos, val):
+                  (val, 0, 0) if pos=='X' else (
+                  (0, val, 0) if pos=='Y' else (
+                  (0, 0, val) if pos=='Z' else
+                  (0, 0, 0))),
+                map(lambda nuf: (nuf[0], float(nuf[1:].strip())), s[1:])), (0,0,0))
+          print >> sys.stderr, (x,y,z)
 
-q = Queue.Queue()
+          #mv = map(lambda _x: signum(_x) * stepsize, [x,y,z])
+          vlen = math.sqrt(reduce(add, map(lambda _x: _x*_x, [x,y,z]), 0))
+          if vlen > 1.0 or vlen <= 0.01:
+            # dead zone
+            print >> sys.stderr, 'dead zone'
+            pass
+          else:
+            mv = map(lambda _x: (_x / vlen) * stepsize, [x,y,z])
+            next_machine_pos = map(lambda (a,b): a+b, zip(machine_pos, mv))
+            print >> sys.stderr, next_machine_pos
+            if len(filter(lambda (_x, (_u, _v)):
+                    (_x <= _u) or (_x >= _v),
+                    zip(next_machine_pos, MACHINE_BOX))) == 0:
+                cmd = ' '.join(['G1']+map(lambda (_x,_y): str(_y)+str(_x),
+                filter(lambda (_x, _): _x!=0, zip(mv+[vlen*speed*60], 'XYZF'))))
+                print >> sys.stderr, cmd
+                machine_pos = next_machine_pos
+                rostock.send(cmd)
+            else:
+                print >> sys.stderr, "NOT GOING"
+            pass
+        q.task_done()
+        time.sleep(dt)
+
+q = Queue.Queue(maxsize=2)
 
 def calib(st, but, (x, y, z), cfg):
     if st == 0:
@@ -297,23 +345,31 @@ def goon():
               continue
 
           (xax, yax, zax) = correct(correction, (xax_, yax_, zax_))
-          print >> sys.stderr, correction,
-          print >> sys.stderr, (xax, yax, zax)
+#          print >> sys.stderr, correction,
+#          print >> sys.stderr, (xax, yax, zax)
       if not dryrun:
           if b1 != b2:
               if b1:
-                  q.put('G1 Z10')
-                  #q.put('G1 Z%d' % (yax*20))
+                  #q.put('G1 Z10', block=False)
+                  put_nonblock(q, 'G1 Z%f' % (zax))
               if b2:
-                  q.put('G1 Z-10')
-                  #q.put('G1 Z-%d' % (yax*20))
+                  #q.put('G1 Z-10', block=False)
+                  put_nonblock(q, 'G1 Z%f' % (-zax))
+                  #q.put('G1 Z-%f' % (zax), block=False)
           if b3:
-              q.put('G1 X%d Y%d' % (xax*40, yax*40))
+              put_nonblock(q, 'G1 X%f Y%f' % (xax, yax))
+              #q.put('G1 X%f Y%f' % (xax, yax), block=False)
 
           print 'q.join'
-          q.join()
+          #q.join()
       if b0:
         q_gui.put('save')
+
+def put_nonblock(_q, w):
+  try:
+    _q.put(w, block=False)
+  except Queue.Full as e:
+    pass
 
 def show_help():
     print """usage: ./joy.py [-h] [-d] [-c /dev/videoX] [-nc] [(-sc|-lc) FILE]

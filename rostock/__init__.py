@@ -15,6 +15,7 @@ G90 ; use absolute coords
 G21 ; set units to millimeters
 G1 Z10.0 ; Z 10mm
 G1 X0.00 Y0.00 F12000.00
+G91 ; use relative coords
 '''
 # G4 P100 ; wait
 # G28 ; home all

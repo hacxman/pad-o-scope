@@ -4,7 +4,7 @@ import math
 
 import rostock
 machine = rostock.Rostock()
-machine.dry_run = True
+machine.dry_run = not True
 machine.connect()
 machine.init()
 

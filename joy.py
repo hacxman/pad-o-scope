@@ -14,6 +14,8 @@ import pygame.camera
 import pygame.image
 from operator import add
 import math
+from rostock import Rostock
+from rostock import END as rostock_END
 
 MACHINE_BOX = [[-50, 50], [-50, 50], [-1.0, 100]]
 
@@ -56,48 +58,48 @@ CALIB_SAVE = 1
 CALIB_LOAD = 2
 calibaction = CALIB_NONE
 
-class Rostock(object):
-    def __init__(self, dev=DEVICE, baud=BAUDRATE,
-                 echo=True):
-        self.dev = dev
-        self.baud = baud
-        self.echo = echo
-
-    def connect(self):
-        sys.stderr.write('Connecting\n')
-        self.bot = serial.Serial(self.dev, self.baud, timeout=30)
-        sys.stderr.write('Connected\n')
-
-    def init(self):
-        sys.stderr.write('Init\n')
-        self.send(INIT)
-        sys.stderr.write('Init done\n')
-
-    def end(self):
-        sys.stderr.write('End\n')
-        self.send(END)
-        sys.stderr.write('End done\n')
-
-    def send(self, data):
-        if '\n' in data:
-            lines = data.splitlines()
-        elif type(data) != list:
-            lines = [data]
-        else:
-            lines = data
-
-        for line in lines:
-            if not line:
-                continue
-
-            if self.echo:
-                print(line)
-            self.bot.write('{0}\n'.format(line))
-
-            response = self.bot.readline()
-            while response[:3] != "ok":
-                sys.stderr.write('Unexpected response: {0}'.format(response))
-                response = self.bot.readline()
+#class Rostock(object):
+#    def __init__(self, dev=DEVICE, baud=BAUDRATE,
+#                 echo=True):
+#        self.dev = dev
+#        self.baud = baud
+#        self.echo = echo
+#
+#    def connect(self):
+#        sys.stderr.write('Connecting\n')
+#        self.bot = serial.Serial(self.dev, self.baud, timeout=30)
+#        sys.stderr.write('Connected\n')
+#
+#    def init(self):
+#        sys.stderr.write('Init\n')
+#        self.send(INIT)
+#        sys.stderr.write('Init done\n')
+#
+#    def end(self):
+#        sys.stderr.write('End\n')
+#        self.send(END)
+#        sys.stderr.write('End done\n')
+#
+#    def send(self, data):
+#        if '\n' in data:
+#            lines = data.splitlines()
+#        elif type(data) != list:
+#            lines = [data]
+#        else:
+#            lines = data
+#
+#        for line in lines:
+#            if not line:
+#                continue
+#
+#            if self.echo:
+#                print(line)
+#            self.bot.write('{0}\n'.format(line))
+#
+#            response = self.bot.readline()
+#            while response[:3] != "ok":
+#                sys.stderr.write('Unexpected response: {0}'.format(response))
+#                response = self.bot.readline()
 
 def signum(a):
   if a > 0:
@@ -107,8 +109,9 @@ def signum(a):
   else:
     return -1
 
-def gcodespitter(speed=10.0, stepsize=1.0, scaler=lambda x,y: (x,y)):
+def gcodespitter(speed=40.0, stepsize=2.0, scaler=lambda x,y: (x,y)):
     rostock = Rostock()
+    rostock.dry_run = not True
     rostock.connect()
     time.sleep(0.1)
     rostock.init()
@@ -152,6 +155,10 @@ def gcodespitter(speed=10.0, stepsize=1.0, scaler=lambda x,y: (x,y)):
             else:
                 print >> sys.stderr, "NOT GOING"
             pass
+        else:
+          print >> sys.stderr, "SENDING NONJIT CMD:", item
+          rostock.send(item)
+
         q.task_done()
         time.sleep(dt)
 
@@ -404,7 +411,12 @@ if __name__ == "__main__":
     if '-nocam' in sys.argv:
       nocam = True
 
-  if not nocam:
-    camera_gui()
-  else:
-    goon()
+  try:
+    if not nocam:
+      camera_gui()
+    else:
+      goon()
+  except KeyboardInterrupt as e:
+    q.put(rostock_END)
+    time.sleep(1)
+    print 'ended.'

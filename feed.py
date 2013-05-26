@@ -4,11 +4,8 @@ import math
 
 import rostock
 machine = rostock.Rostock()
-dry = not True
-if dry:
-    machine.dry_run = True
-else:
-    machine.connect()
+machine.dry_run = True
+machine.connect()
 machine.init()
 
 t = 0

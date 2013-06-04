@@ -14,9 +14,10 @@ G1 F12000
 G90 ; use absolute coords
 G21 ; set units to millimeters
 G1 Z10.0 ; Z 10mm
-G1 X0.00 Y0.00 F12000.00
-G91 ; use relative coords
+G1 X0.00 Y0.00 Z20.0 F12000.00
 '''
+#G91 ; use relative coords
+
 # G4 P100 ; wait
 # G28 ; home all
 END = '''
@@ -42,6 +43,15 @@ class Rostock(object):
         self.echo = echo
         self.dry_run = dry_run
 
+    def wait_printer(self):
+        while True:
+            sys.stderr.write('Polling by M114\n')
+            self.bot.write('M114\n')
+            resp = self.bot.readline()
+            if resp.startswith('ok'):
+                sys.stderr.write('Got {0}'.format(resp))
+                return
+
     def connect(self):
         if not self.dry_run:
             sys.stderr.write('Connecting\n')
@@ -51,6 +61,7 @@ class Rostock(object):
             sys.stderr.write('Dry run enabled, not connecting\n')
 
     def init(self):
+        self.wait_printer()
         sys.stderr.write('Init\n')
         self.send(INIT)
         sys.stderr.write('Init done\n')

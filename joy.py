@@ -17,7 +17,7 @@ import math
 from rostock import Rostock
 from rostock import END as rostock_END
 
-MACHINE_BOX = [[-50, 50], [-50, 50], [-1.0, 100]]
+MACHINE_BOX = [[-49, 49], [-49, 49], [0.0, 100]]
 
 M_INIT = '''
 G28 ; home
@@ -109,7 +109,7 @@ def signum(a):
   else:
     return -1
 
-def gcodespitter(speed=40.0, stepsize=2.0, scaler=lambda x,y: (x,y)):
+def gcodespitter(speed=660.0, stepsize=0.2, scaler=lambda x,y: (x,y)):
     rostock = Rostock()
     rostock.dry_run = not True
     rostock.connect()
@@ -136,25 +136,35 @@ def gcodespitter(speed=40.0, stepsize=2.0, scaler=lambda x,y: (x,y)):
 
           #mv = map(lambda _x: signum(_x) * stepsize, [x,y,z])
           vlen = math.sqrt(reduce(add, map(lambda _x: _x*_x, [x,y,z]), 0))
-          if vlen > 1.0 or vlen <= 0.01:
+          if vlen > 10.0 or vlen <= 0.01:
             # dead zone
             print >> sys.stderr, 'dead zone'
             pass
           else:
-            mv = map(lambda _x: (_x / vlen) * stepsize, [x,y,z])
+            mv = map(lambda _x: _x * stepsize, [-x,y,z])
             next_machine_pos = map(lambda (a,b): a+b, zip(machine_pos, mv))
             print >> sys.stderr, next_machine_pos
-            if len(filter(lambda (_x, (_u, _v)):
-                    (_x <= _u) or (_x >= _v),
-                    zip(next_machine_pos, MACHINE_BOX))) == 0:
-                cmd = ' '.join(['G1']+map(lambda (_x,_y): str(_y)+str(_x),
-                filter(lambda (_x, _): _x!=0, zip(mv+[vlen*speed*60], 'XYZF'))))
-                print >> sys.stderr, cmd
-                machine_pos = next_machine_pos
-                rostock.send(cmd)
-            else:
-                print >> sys.stderr, "NOT GOING"
-            pass
+            #if len(filter(lambda (_x, (_u, _v)):
+            #        (_x <= _u) or (_x >= _v),
+            #        zip(next_machine_pos, MACHINE_BOX))) == 0:
+            next_machine_pos = map(lambda (_x, (_u, _v)):
+                  _u if _x < _u else (
+                  _v if _x > _v else (
+                  _x)), zip(next_machine_pos, MACHINE_BOX))
+
+            cmd = ' '.join(['G1']+map(lambda (_x,_y): str(_y)+str(_x),
+            #filter(lambda (_x, _): _x!=0, zip(mv+[vlen*speed*60], 'XYZF'))))
+            filter(lambda (_x, _): _x!=0, zip(next_machine_pos+[vlen*speed*60], 'XYZF'))))
+            print >> sys.stderr, cmd
+            machine_pos = next_machine_pos
+            rostock.send(cmd)
+            print >> sys.stderr, vlen/dt-dt
+            time.sleep(dt*vlen)
+            q.task_done()
+            continue
+            #else:
+            #    print >> sys.stderr, "NOT GOING"
+            #pass
         else:
           print >> sys.stderr, "SENDING NONJIT CMD:", item
           rostock.send(item)
@@ -162,7 +172,7 @@ def gcodespitter(speed=40.0, stepsize=2.0, scaler=lambda x,y: (x,y)):
         q.task_done()
         time.sleep(dt)
 
-q = Queue.Queue(maxsize=2)
+q = Queue.Queue(maxsize=1)
 
 def calib(st, but, (x, y, z), cfg):
     if st == 0:
@@ -231,7 +241,7 @@ def correct(cfg, coord):
 
     return out
 
-q_gui = Queue.Queue()
+q_gui = Queue.Queue(maxsize=1)
 pygame.init()
 def camera_gui():
     screen = pygame.display.set_mode([800,480])
@@ -254,7 +264,7 @@ def camera_gui():
       # fetch the camera image
       image = cam.get_image()
       # blank out the screen
-      screen.fill([0,0,0])
+      screen.fill([0,0,20])
       # copy the camera image to the screen
       screen.blit( image, ( 100, 0 ) )
       # update the screen to show the latest screen image
@@ -264,7 +274,7 @@ def camera_gui():
         if msg == 'save':
           fnm = time.strftime('%H%M%S-%Y%m%d.png')
           pygame.image.save(image, fnm)
-          print fnm, 'saved'
+          print >> sys.stderr, fnm, 'saved'
         if msg == 'quit':
           return
       except Queue.Empty as a:
@@ -306,7 +316,7 @@ def goon():
       joystick.get_init()
 
     while True:
-      time.sleep(0.05)
+#      time.sleep(0.00001)
 
       if joystick_count == 1:
 
@@ -370,7 +380,8 @@ def goon():
           print 'q.join'
           #q.join()
       if b0:
-        q_gui.put('save')
+        put_nonblock(q_gui, 'save')
+        #q_gui.put('save')
 
 def put_nonblock(_q, w):
   try:
@@ -417,6 +428,6 @@ if __name__ == "__main__":
     else:
       goon()
   except KeyboardInterrupt as e:
-    q.put(rostock_END)
+    q.put('G28\n'+rostock_END)
     time.sleep(1)
     print 'ended.'
